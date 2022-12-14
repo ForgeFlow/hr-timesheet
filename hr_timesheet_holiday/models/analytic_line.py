@@ -31,15 +31,3 @@ class AnalyticLine(models.Model):
                 if sheets:
                     ts_line.sheet_id_computed = sheets[0]
                     ts_line.sheet_id = sheets[0]
-
-    @api.multi
-    def write(self, vals):
-        if not self.env.context.get('force_write', False):
-            for rec in self:
-                if rec.account_id.is_leave_account \
-                        and rec.leave_id:
-                    raise ValidationError(_(
-                        "This line is protected against editing because it "
-                        "was created automatically by a leave request. "
-                        "Please edit the leave request instead."))
-        super(AnalyticLine, self).write(vals)
