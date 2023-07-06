@@ -31,3 +31,17 @@ class AnalyticLine(models.Model):
                 if sheets:
                     ts_line.sheet_id_computed = sheets[0]
                     ts_line.sheet_id = sheets[0]
+
+    def create(self, vals):
+        # if the analytic line is for a project on leave and there is
+        # a leave on the same day, then link the line to the leave
+        if vals.get("project_id", False) and vals.get("sheet_id", False) and vals.get("date", False) and not vals.get("leave_id", False):
+            project_id = vals.get("project_id", False)
+            date = vals.get("date")
+            sheet_id =  vals.get("sheet_id")
+            project = self.env["project.project"].browse(project_id)
+            account = project.analytic_account_id
+            existing_line = self.env["account.analytic.line"].search([("date", "=", date), ("account_id", "=", account.id), ("sheet_id", "=", sheet_id)], limit = 1)
+            if existing_line.leave_id:
+                vals.update({"leave_id": existing_line.leave_id.id})
+        return super(AnalyticLine, self).create(vals)
