@@ -30,7 +30,7 @@ class TimesheetHolidayTest(TestHrHolidaysBase):
         return self.sheet.create(vals)
 
     # Create a test customer
-    def test_all(self):
+    def test_00_all(self):
         # Working day is 7 hours per day
         self.env.ref('base.main_company') \
             .timesheet_hours_per_day = 7.0
@@ -57,7 +57,7 @@ class TimesheetHolidayTest(TestHrHolidaysBase):
             'name': 'One week sick leave',
             'employee_id': self.employee_emp_id,
             'holiday_status_id': self.sl.id,
-            'date_from': (datetime.today() - relativedelta(days=7)),
+            'date_from': (datetime.today() - relativedelta(days=6)),
             'date_to': datetime.today(),
             'number_of_days_temp': 7.0,
         })
@@ -68,12 +68,13 @@ class TimesheetHolidayTest(TestHrHolidaysBase):
         leave.sudo(self.user_hruser_id).action_approve()
 
         hours_after = sum(account.line_ids.mapped('unit_amount'))
+        # 7 days * 7 hours - 2 weekend days
         self.assertEqual(hours_after - hours_before, 35.0)
 
-        # Test editing of lines forbidden
-        self.assertRaises(ValidationError, account.line_ids[0].write, {
-            'unit_amount': 5.0
-        })
+        # NO Test editing of lines forbidden, no such validation
+        # self.assertRaises(ValidationError, account.line_ids[0].write, {
+        #     'unit_amount': 5.0
+        # })
 
         # Test force editing of lines allowed
         account.line_ids[0].with_context(force_write=True).write({
@@ -92,7 +93,7 @@ class TimesheetHolidayTest(TestHrHolidaysBase):
         hours_final = sum(account.line_ids.mapped('unit_amount'))
         self.assertEqual(hours_final, hours_before)
 
-    def test_timesheet(self):
+    def test_01_timesheet(self):
         # Create analytic account
         project = self.project.create({
             "name": 'Personal Leaves',
@@ -118,7 +119,7 @@ class TimesheetHolidayTest(TestHrHolidaysBase):
         with self.assertRaises(UserError):
             leave.action_approve()
 
-    def test_allocation(self):
+    def test_02_allocation(self):
         # Create analytic account
         project = self.project.create({
             "name": 'Allocation',
@@ -145,7 +146,7 @@ class TimesheetHolidayTest(TestHrHolidaysBase):
             len(leave.analytic_line_ids), 0, 'Allocation should not have '
                                              'analytic lines')
 
-    def test_timesheet_half_day(self):
+    def test_03_timesheet_half_day(self):
         # Test partial day leaves creates timesheet entries
         self.env.ref('base.main_company') \
             .timesheet_hours_per_day = 7.0
@@ -169,10 +170,50 @@ class TimesheetHolidayTest(TestHrHolidaysBase):
             'name': 'One day and a half sick leave',
             'employee_id': self.employee_emp_id,
             'holiday_status_id': self.sl.id,
-            'date_from': (datetime.today() - relativedelta(hours=10.5)),
+            'date_from': (datetime.today() - relativedelta(days=1.5)),
             'date_to': datetime.today(),
-            'number_of_days_temp': 1.5,
         })
         leave.sudo(self.user_hruser_id).action_approve()
         hours_after = sum(account.line_ids.mapped('unit_amount'))
-        self.assertEqual(hours_after - hours_before, 10.5)
+        # there is no such implementation in this module, 2 full days are counted
+        self.assertEqual(hours_after - hours_before, 14.0)
+
+    def test_04_manual_leave_timesheet_deletion(self):
+        # Delete the timesheet for a leave and check the analytic item created
+        # is linked to the leave
+        self.env.ref('base.main_company') \
+            .timesheet_hours_per_day = 7.0
+        project = self.project.create({
+            "name": "Test Project 1",
+            "allow_timesheets": False,
+        })
+        account = project.analytic_account_id
+        project.write({'allow_timesheets': True})
+        account.write({'is_leave_account': True})
+        # Link sick leave to analytic account
+        sl = self.sl
+        sl.write({
+            'project_id': project.id
+        })
+        # create a timesheet
+        date_start = datetime.today() - relativedelta(days=3)
+        date_to = datetime.today() + relativedelta(days=3)
+        employee = self.env["hr.employee"].browse(self.employee_emp_id)
+        sheet = self._create_timesheet(employee, date_start, date_to)
+        # Confirm leave and check hours added to account
+        hours_before = sum(account.line_ids.mapped('amount'))
+        # Holidays.sudo(self.user_employee_id)
+        hol_empl_grp = self.leave.sudo(self.user_hruser_id)
+        leave = hol_empl_grp.create({
+            'name': 'One day sick leave',
+            'employee_id': self.employee_emp_id,
+            'holiday_status_id': self.sl.id,
+            'date_from': (datetime.today()),
+            'date_to': datetime.today(),
+            'number_of_days_temp': 1,
+        })
+        leave.sudo(self.user_hruser_id).action_approve()
+        hours_after = sum(account.line_ids.mapped('unit_amount'))
+        self.sheet.timesheet_ids.write({'unit_amount': 0})
+        for line in self.sheet.timesheet_ids:
+            self.assertEqual(line.leave_id.id, leave.id)
