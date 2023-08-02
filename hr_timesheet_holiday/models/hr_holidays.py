@@ -52,7 +52,7 @@ class HrHolidays(models.Model):
     @api.model
     def _get_hours_per_day(self, company, employee):
         """Can be overridden to consider employee details also"""
-        hours_per_day = company.timesheet_hours_per_day
+        hours_per_day = company.sudo().timesheet_hours_per_day
         if not hours_per_day:
             raise UserError(
                 _("No hours per day defined for Company '%s'") %
