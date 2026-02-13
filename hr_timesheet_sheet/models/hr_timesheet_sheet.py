@@ -398,12 +398,10 @@ class Sheet(models.Model):
     def _get_matrix_sortby(self, key):
         res = []
         for attribute in key:
-            if hasattr(attribute, "name_get"):
-                name = attribute.display_name
-                value = name if name else ""
+            if attribute:
+                res.append(getattr(attribute, "display_name", attribute))
             else:
-                value = attribute
-            res.append(value)
+                res.append("")
         return res
 
     def _get_data_matrix(self):
@@ -844,6 +842,7 @@ class SheetLine(models.TransientModel):
     _name = "hr_timesheet.sheet.line"
     _inherit = "hr_timesheet.sheet.line.abstract"
     _description = "Timesheet Sheet Line"
+    _order = "value_y, date"
 
     value_x = fields.Char(string="Date Name")
     value_y = fields.Char(string="Project Name")
